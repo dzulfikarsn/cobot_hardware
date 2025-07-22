@@ -1,0 +1,9 @@
+<library path="cobot_hardware">
+  <class name="cobot_hardware/CobotHardware"
+         type="cobot_hardware::CobotHardware"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Cobot Hardware interface to ESP32
+    </description>
+  </class>
+</library>
