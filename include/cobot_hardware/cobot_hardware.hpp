@@ -17,22 +17,19 @@
 namespace cobot_hardware
 {
 
-constexpr int intSize = 4;
-constexpr int ms_timeout = 100;
-
 struct Joint
 {
-  uint8_t id{};
+  uint8_t id;
   std::string name;
-  double state{};
-  double command{};
-  double prevCommand{};
+  double state;
+  double command;
+  double deg;  // command but in degree instead of radian
 };
 
 class CobotHardware : public hardware_interface::SystemInterface
 {
 public:
-  CobotHardware();
+  CobotHardware() = default;
   ~CobotHardware() = default;
 
   RCLCPP_SHARED_PTR_DEFINITIONS(CobotHardware)
@@ -45,12 +42,6 @@ public:
   
   hardware_interface::return_type read(const rclcpp::Time& time, const rclcpp::Duration& period) override;
   
-  /**
-   * @brief menuliskan data sudut servo ke serial
-   * 
-   * @note format : '<' + data + '>'
-   *       dimana data : nilai integer sejumlah servo yang dibuat dalam vector of uint8_t
-   */
   hardware_interface::return_type write(const rclcpp::Time& time, const rclcpp::Duration& period) override;
 
   std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
@@ -58,12 +49,6 @@ public:
   std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
 
 private:
-  hardware_interface::return_type enable_torque(const bool enabled);
-
-  hardware_interface::return_type reset_command();
-
-  hardware_interface::return_type set_position_mode();
-
   std::vector<Joint> joints;
   LibSerial::SerialPort port;
   std::string portName;

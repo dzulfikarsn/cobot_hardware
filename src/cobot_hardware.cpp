@@ -1,6 +1,6 @@
 #include "cobot_hardware/cobot_hardware.hpp"
 
-#include <sys/ioctl.h>
+#include <cmath>
 
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "hardware_interface/types/hardware_interface_return_values.hpp"
@@ -10,6 +10,10 @@
 
 namespace cobot_hardware
 {
+
+constexpr int INT_SIZE = 4;
+constexpr double RAD_TO_DEG = 180.0 / M_PI;
+constexpr double DEG_TO_RAD = M_PI / 180.0;
 
 using hardware_interface::CallbackReturn;
 using hardware_interface::return_type;
@@ -28,14 +32,14 @@ CallbackReturn CobotHardware::on_init(const hardware_interface::HardwareInfo& in
   }
 
   // ambil data dari ros2control tag
-  joints.resize(info_.joints.size(), Joint());
-  for (size_t i=0; i<info_.joints.size(); i++) {
-    joints.at(i).name = info_.joints.at(i).name;
-    joints.at(i).id = static_cast<uint8_t>(std::stoi(info_.joints.at(i).parameters.at("id")));
-    joints.at(i).state = std::numeric_limits<double>::quiet_NaN();
-    joints.at(i).command = std::numeric_limits<double>::quiet_NaN();
-    joints.at(i).prevCommand = joints.at(i).command;
-    RCLCPP_INFO(logger, "Joint ID : %d", joints.at(i).id);
+  joints.clear();
+  for (const auto& infoJoint : info_.joints) {
+    Joint j;
+    j.name = infoJoint.name;
+    j.id = static_cast<uint8_t>(std::stoi(infoJoint.parameters.at("id")));
+    j.command = std::numeric_limits<double>::quiet_NaN();
+    joints.push_back(j);
+    RCLCPP_INFO(logger, "Joint ID : %d", j.id);
   }
 
   portName = info_.hardware_parameters.at("port_name");
@@ -58,23 +62,6 @@ std::vector<hardware_interface::CommandInterface> CobotHardware::export_command_
   }
 
   return command_interfaces;
-}
-
-// ==================================================
-//              export_state_interfaces              
-// ==================================================
-
-std::vector<hardware_interface::StateInterface> CobotHardware::export_state_interfaces() {
-  RCLCPP_DEBUG(logger, "export_state_interfaces");
-
-  std::vector<hardware_interface::StateInterface> state_interfaces;
-  for (auto& joint : joints) {
-    state_interfaces.emplace_back(
-      hardware_interface::StateInterface(
-        joint.name, hardware_interface::HW_IF_POSITION, &joint.state));
-  }
-
-  return state_interfaces;
 }
 
 // ==================================================
@@ -110,8 +97,7 @@ CallbackReturn CobotHardware::on_configure(const rclcpp_lifecycle::State& /* pre
 CallbackReturn CobotHardware::on_activate(const rclcpp_lifecycle::State& /* previous_state */) {
   RCLCPP_DEBUG(logger, "activate");
 
-  // TODO: read write sekali
-  read(rclcpp::Time{}, rclcpp::Duration(0, 0));
+  // TODO: write sekali
   write(rclcpp::Time{}, rclcpp::Duration(0, 0));
 
   return CallbackReturn::SUCCESS;
@@ -122,31 +108,8 @@ CallbackReturn CobotHardware::on_activate(const rclcpp_lifecycle::State& /* prev
 // ==================================================
 
 return_type CobotHardware::read(const rclcpp::Time& /* time */, const rclcpp::Duration& /* period */) {
-  // TODO: read
-  char startMarker;
-  do {
-    try {
-      port.ReadByte(startMarker, ms_timeout);
-    }
-    catch(const LibSerial::ReadTimeout&) {
-      RCLCPP_ERROR(logger, "read '<' timeout.");
-      return return_type::ERROR;
-    }
-  } while (startMarker != '<');
-  
-  LibSerial::DataBuffer buffer(intSize);
   for (auto& joint : joints) {
-    try {
-      port.Read(buffer, intSize, ms_timeout);
-    }
-    catch(const LibSerial::ReadTimeout&) {
-      RCLCPP_ERROR(logger, "read data timeout");
-      return return_type::ERROR;
-    }
-
-    int intVal;
-    std::memcpy(&intVal, buffer.data(), buffer.size());
-    joint.state = static_cast<double>(intVal);
+    joint.state = joint.deg * DEG_TO_RAD;
   }
   
   return return_type::OK;
@@ -157,21 +120,26 @@ return_type CobotHardware::read(const rclcpp::Time& /* time */, const rclcpp::Du
 // ==================================================
 
 return_type CobotHardware::write(const rclcpp::Time& /* time */, const rclcpp::Duration& /* period */) {
-  const int jointCount = joints.size();
-  const int dataSize = jointCount * intSize;
-  const int totalSize = dataSize + 2;  // '<' + data + '>'
-
-  LibSerial::DataBuffer packet(totalSize);
-  packet[0] = '<';
-
-  int indexPos = 1;
-  for (const auto& joint: joints) {
-    int pos = static_cast<int>(joint.command);
-    std::memcpy(&packet[indexPos], &pos, intSize);
-    indexPos += intSize;
+  // convert rad to deg
+  for (auto& joint : joints) {
+    joint.deg = joint.command * RAD_TO_DEG;
   }
 
-  packet[indexPos] = '>';
+  // WRITE SESSION
+
+  const int dataSize = joints.size() * INT_SIZE + 2;  // data size + 2 for start and end marker
+
+  LibSerial::DataBuffer packet(dataSize);  // LibSerial::DataBuffer = std::vector<uint8_t>
+  packet[0] = '<';  // start marker
+
+  int indexPos = 1;  // the index after '<'
+  for (const auto& joint: joints) {
+    int pos = static_cast<int>(std::round(joint.deg));
+    std::memcpy(&packet[indexPos], &pos, INT_SIZE);
+    indexPos += INT_SIZE;
+  }
+
+  packet[indexPos] = '>';  // end marker
 
   port.Write(packet);
 
