@@ -13,6 +13,8 @@ find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 
+find_library(LIBSERIAL_LIB serial REQUIRED)
+
 add_library(cobot_hardware SHARED src/cobot_hardware.cpp)
 
 target_compile_features(cobot_hardware PUBLIC cxx_std_17)
@@ -27,6 +29,10 @@ ament_target_dependencies(cobot_hardware
   pluginlib
   rclcpp
   rclcpp_lifecycle
+)
+
+target_link_libraries(cobot_hardware
+  ${LIBSERIAL_LIB}
 )
 
 # Export hardware plugins

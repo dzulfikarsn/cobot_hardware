@@ -11,7 +11,7 @@
 namespace cobot_hardware
 {
 
-constexpr int INT_SIZE = 4;
+constexpr int INT_SIZE = 4;  // sizeof(int)
 constexpr double RAD_TO_DEG = 180.0 / M_PI;
 constexpr double DEG_TO_RAD = M_PI / 180.0;
 
@@ -37,7 +37,7 @@ CallbackReturn CobotHardware::on_init(const hardware_interface::HardwareInfo& in
     Joint j;
     j.name = infoJoint.name;
     j.id = static_cast<uint8_t>(std::stoi(infoJoint.parameters.at("id")));
-    j.command = std::numeric_limits<double>::quiet_NaN();
+    j.command = 0.0;
     joints.push_back(j);
     RCLCPP_INFO(logger, "Joint ID : %d", j.id);
   }
@@ -62,6 +62,23 @@ std::vector<hardware_interface::CommandInterface> CobotHardware::export_command_
   }
 
   return command_interfaces;
+}
+
+// ==================================================
+//              export_state_interfaces              
+// ==================================================
+
+std::vector<hardware_interface::StateInterface> CobotHardware::export_state_interfaces() {
+  RCLCPP_DEBUG(logger, "export_state_interfaces");
+
+  std::vector<hardware_interface::StateInterface> state_interfaces;
+  for (auto& joint : joints) {
+    state_interfaces.emplace_back(
+      hardware_interface::StateInterface(
+        joint.name, hardware_interface::HW_IF_POSITION, &joint.state));
+  }
+
+  return state_interfaces;
 }
 
 // ==================================================
@@ -127,7 +144,7 @@ return_type CobotHardware::write(const rclcpp::Time& /* time */, const rclcpp::D
 
   // WRITE SESSION
 
-  const int dataSize = joints.size() * INT_SIZE + 2;  // data size + 2 for start and end marker
+  const int dataSize = 1 + joints.size() * INT_SIZE + 1;  // '<' + data + '>'
 
   LibSerial::DataBuffer packet(dataSize);  // LibSerial::DataBuffer = std::vector<uint8_t>
   packet[0] = '<';  // start marker
