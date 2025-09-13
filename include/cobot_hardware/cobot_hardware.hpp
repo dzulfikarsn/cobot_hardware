@@ -23,7 +23,7 @@ struct Joint
   std::string name;
   double state;
   double command;
-  double deg;  // command but in degree instead of radian
+  int us;  // command but in microseconds instead of radian
 };
 
 class CobotHardware : public hardware_interface::SystemInterface

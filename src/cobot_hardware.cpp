@@ -12,8 +12,10 @@ namespace cobot_hardware
 {
 
 constexpr int INT_SIZE = 4;  // sizeof(int)
-constexpr double RAD_TO_DEG = 180.0 / M_PI;
-constexpr double DEG_TO_RAD = M_PI / 180.0;
+
+inline int radToMicroseconds(const double& rad) {
+  return static_cast<int>(std::lround((rad + M_PI)/M_PI*1000 + 500));
+}
 
 using hardware_interface::CallbackReturn;
 using hardware_interface::return_type;
@@ -126,7 +128,7 @@ CallbackReturn CobotHardware::on_activate(const rclcpp_lifecycle::State& /* prev
 
 return_type CobotHardware::read(const rclcpp::Time& /* time */, const rclcpp::Duration& /* period */) {
   for (auto& joint : joints) {
-    joint.state = joint.deg * DEG_TO_RAD;
+    joint.state = joint.command;
   }
   
   return return_type::OK;
@@ -139,11 +141,10 @@ return_type CobotHardware::read(const rclcpp::Time& /* time */, const rclcpp::Du
 return_type CobotHardware::write(const rclcpp::Time& /* time */, const rclcpp::Duration& /* period */) {
   // convert rad to deg
   for (auto& joint : joints) {
-    joint.deg = joint.command * RAD_TO_DEG;
+    joint.us = radToMicroseconds(joint.command);
   }
 
   // WRITE SESSION
-
   const int dataSize = 1 + joints.size() * INT_SIZE + 1;  // '<' + data + '>'
 
   LibSerial::DataBuffer packet(dataSize);  // LibSerial::DataBuffer = std::vector<uint8_t>
@@ -151,8 +152,7 @@ return_type CobotHardware::write(const rclcpp::Time& /* time */, const rclcpp::D
 
   int indexPos = 1;  // the index after '<'
   for (const auto& joint: joints) {
-    int pos = static_cast<int>(std::round(joint.deg));
-    std::memcpy(&packet[indexPos], &pos, INT_SIZE);
+    std::memcpy(&packet[indexPos], &joint.us, INT_SIZE);
     indexPos += INT_SIZE;
   }
 
